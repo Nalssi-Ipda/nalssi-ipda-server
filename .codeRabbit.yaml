@@ -1,0 +1,623 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+language: "ko-KR"
+
+tone_instructions: >-
+  시니어 백엔드 개발자처럼 간결하고 근거 중심으로 리뷰한다.
+  실제 문제와 학습 가치가 있는 내용을 우선하고,
+  문제의 원인·발생 조건·개선 방향·trade-off를 설명한다.
+  단순 포맷팅, 취향, 사소한 네이밍 지적은 최소화한다.
+
+
+reviews:
+  # 학습 목적이므로 기본보다 적극적으로 리뷰한다.
+  # 다만 아래 path_instructions로 잡지적은 억제한다.
+  profile: "assertive"
+
+  request_changes_workflow: false
+
+  high_level_summary: true
+  high_level_summary_in_walkthrough: true
+  high_level_summary_instructions: >-
+    변경 목적과 영향 범위를 간결하게 요약한다.
+    버그, 데이터 정합성, 동시성, 성능, 보안 또는 운영상
+    중요한 위험이 있다면 핵심 사항만 함께 설명한다.
+
+  review_status: true
+  review_progress: true
+  review_details: false
+
+  collapse_walkthrough: true
+  changed_files_summary: false
+  sequence_diagrams: false
+  estimate_code_review_effort: false
+
+  related_issues: false
+  related_prs: false
+  suggested_labels: false
+  suggested_reviewers: false
+
+  in_progress_fortune: false
+  poem: false
+
+  # 학습 목적상 AI 수정용 prompt보다 리뷰 자체에 집중한다.
+  enable_prompt_for_ai_agents: false
+
+
+  # ---------------------------------------------------------------------------
+  # 자동 리뷰
+  # ---------------------------------------------------------------------------
+
+  auto_review:
+    enabled: true
+
+    # push된 변경사항도 자동으로 다시 검토
+    auto_incremental_review: true
+
+    # 너무 잦은 commit review 방지
+    auto_pause_after_reviewed_commits: 5
+
+    # 작업 중인 Draft PR은 제외
+    drafts: false
+
+    # default branch 외 develop PR도 검토
+    # base_branches는 regex를 지원하므로 정확히 develop만 매칭
+    base_branches:
+      - "^develop$"
+
+    ignore_title_keywords:
+      - "WIP"
+      - "DO NOT MERGE"
+      - "[skip review]"
+
+    labels:
+      - "!do-not-review"
+
+    ignore_usernames:
+      - "dependabot[bot]"
+      - "renovate[bot]"
+
+
+  # ---------------------------------------------------------------------------
+  # 리뷰 제외 경로
+  # ---------------------------------------------------------------------------
+
+  path_filters:
+    - "!**/.idea/**"
+    - "!**/.gradle/**"
+    - "!**/build/**"
+    - "!**/out/**"
+    - "!**/generated/**"
+    - "!**/*.class"
+    - "!**/gradle/wrapper/gradle-wrapper.jar"
+
+
+  # ---------------------------------------------------------------------------
+  # 경로별 리뷰 기준
+  # ---------------------------------------------------------------------------
+
+  path_instructions:
+
+    # ========================================================================
+    # Production Java
+    # ========================================================================
+
+    - path: "ipda-server/src/main/java/**/*.java"
+      instructions: |
+        Java 25 + Spring Boot 기반 백엔드 production code다.
+
+        목표는 단순히 동작 여부만 확인하는 것이 아니라,
+        작성자가 Java 기본기부터 실무 백엔드 설계까지 성장하도록
+        시니어 백엔드 개발자 관점에서 리뷰하는 것이다.
+
+        체크리스트를 기계적으로 전부 언급하지 말고,
+        변경된 코드에서 실제 근거가 있는 문제만 지적한다.
+
+        [우선순위]
+
+        다음 순서로 중요하게 검토한다.
+
+        1. 실제 버그, 데이터 손실, 보안 취약점, 장애 가능성
+        2. 동시성, 트랜잭션, 데이터 정합성 문제
+        3. DB/API/성능/메모리/운영 위험
+        4. 객체 책임, 응집도, 결합도, 유지보수성
+        5. Java 언어 및 자료구조/JVM 기본기
+        6. 의미 있는 가독성 개선
+
+        다음은 원칙적으로 comment하지 않는다.
+
+        - import 순서
+        - 공백, 줄바꿈, brace 위치
+        - formatter가 해결할 문제
+        - 개인 취향 수준의 변수명
+        - 실제 영향 없는 micro optimization
+        - "더 깔끔해 보인다" 수준의 변경
+
+        단, 이름이 잘못된 의미를 전달하거나 버그 가능성을 높이면 지적한다.
+
+
+        [Java 기본기 / 상태 관리]
+
+        다음을 적극적으로 확인한다.
+
+        - 지역 변수로 충분한 값을 instance field로 올리지 않았는가
+        - 불필요한 mutable field가 존재하지 않는가
+        - 변경되지 않는 dependency/state가 final이어야 하는가
+        - static mutable state가 전역 상태를 만들지 않는가
+        - static field가 여러 thread에서 공유될 때 안전한가
+        - singleton Spring Bean에 request별 mutable state를 저장하지 않는가
+        - field visibility가 필요 이상으로 넓지 않은가
+
+        단순히 "final을 붙일 수 있다"는 이유만으로 지적하지 않는다.
+        불변성, thread-safety, 의도 표현 또는 설계 명확성이 실제로 좋아질 때만 지적한다.
+
+
+        [상수 / Magic Value / Enum]
+
+        - 의미 있는 숫자나 문자열이 여러 곳에 반복되지 않는가
+        - business rule이 magic number/string으로 흩어져 있지 않은가
+        - 단순 상수보다 enum/value object가 적절한 domain concept인지 검토한다
+        - 제한된 상태를 String/int로 관리하여 잘못된 값이 들어갈 수 있지 않은가
+        - 한 번 사용하는 trivial literal을 무조건 상수화하라고 하지 않는다
+
+        예를 들어 "ACTIVE"가 단순 문자열인지,
+        제한된 domain state인지 구분해서 판단한다.
+
+
+        [자료구조 / 알고리즘]
+
+        자료구조가 실제 연산 패턴과 데이터 규모에 적절한지 검토한다.
+
+        - membership lookup을 반복하면서 List.contains()를 사용하지 않는가
+        - key 기반 조회를 반복하면서 List 전체 순회를 하지 않는가
+        - 중복 제거 목적이라면 Set이 더 적절한가
+        - ordering이 필요한데 순서가 보장되지 않는 자료구조에 의존하지 않는가
+        - ordering이 필요 없는데 TreeMap/TreeSet 비용을 지불하지 않는가
+        - Queue/Deque/PriorityQueue가 적절한데 List로 억지 구현하지 않는가
+        - concurrent access가 있는데 HashMap/ArrayList를 공유하지 않는가
+        - concurrent collection을 사용한다면 실제 read/write 특성에 맞는가
+
+        다른 자료구조를 제안할 때는 가능한 경우
+        주요 연산, 시간복잡도, 공간복잡도, 데이터 규모,
+        ordering 필요 여부를 근거로 설명한다.
+
+        "HashSet이 무조건 빠르다" 같은 규칙으로 리뷰하지 않는다.
+
+
+        [Collection / Stream]
+
+        - mutable collection을 그대로 외부에 노출하지 않는가
+        - defensive copy가 필요한 경계인지 검토한다
+        - 반환된 collection 변경으로 내부 상태가 깨질 수 있는가
+        - Stream pipeline이 지나치게 복잡하지 않은가
+        - Stream 때문에 불필요한 materialization이 발생하지 않는가
+        - 단순 반복문보다 오히려 이해하기 어려운 Stream을 사용하지 않는가
+        - 대량 데이터 전체를 collect하여 메모리에 올리지 않는가
+
+
+        [null / Optional]
+
+        - Optional을 field, DTO field, parameter 등에 습관적으로 사용하지 않는가
+        - Optional.get()을 존재 보장 없이 호출하지 않는가
+        - null 가능성이 contract에 명확하게 표현되어 있는가
+        - null collection과 empty collection 사용이 일관적인가
+
+
+        [equals / hashCode / 객체 동일성]
+
+        - equals/hashCode contract가 깨지지 않는가
+        - HashMap/HashSet key가 위험하게 mutable하지 않은가
+        - JPA Entity의 equals/hashCode가 entity lifecycle과 충돌하지 않는가
+        - identity와 value equality를 혼동하지 않는가
+
+
+        [Exception / Resource]
+
+        - exception을 catch한 뒤 삼키지 않는가
+        - 지나치게 넓은 Exception catch를 하지 않는가
+        - 원인 exception을 잃어버리지 않는가
+        - 의미 없이 exception을 wrapping하지 않는가
+        - AutoCloseable resource가 적절히 close되는가
+        - try-with-resources가 필요한 위치인지 검토한다
+
+
+        [Java API 사용]
+
+        - 표준 API가 있는데 불필요하게 직접 구현하지 않는가
+        - 날짜/시간 처리에서 timezone을 놓치지 않는가
+        - 정밀 계산이 필요한 곳에서 double을 잘못 사용하지 않는가
+        - String 비교에 ==를 사용하지 않는가
+        - enum 변환/비교가 안전한가
+        - record/sealed type 등 Java 기능이 모델을 실제로 더 명확하게 하는가
+
+        새로운 Java 기능을 "최신 기능"이라는 이유만으로 권장하지 않는다.
+
+
+        [JVM / Memory / Performance]
+
+        근거 없는 micro optimization은 하지 않되 다음은 확인한다.
+
+        - 요청마다 큰 collection/object graph를 생성하지 않는가
+        - DB 결과 전체를 메모리에 올린 뒤 filtering/sorting하지 않는가
+        - hot path에서 불필요한 객체가 대량 생성되지 않는가
+        - 반복문 내부에서 String/collection/object를 반복 생성하지 않는가
+        - 반복적인 String concatenation이 대량으로 발생하지 않는가
+        - 대량 처리에서 불필요한 boxing/unboxing이 심하지 않은가
+        - 큰 file/byte[]/stream을 메모리에 통째로 올리지 않는가
+        - static collection/cache/listener가 객체를 계속 붙잡지 않는가
+        - 크기 제한 없는 collection/cache가 지속적으로 증가할 수 있는가
+        - ThreadLocal/resource/executor lifecycle이 안전한가
+
+        호출 빈도, 반복 구조, 데이터 크기 또는 lifetime 근거가 있을 때만 지적한다.
+
+
+        [객체지향 / 책임]
+
+        - 한 class가 지나치게 많은 책임을 가지지 않는가
+        - 한 method가 여러 abstraction level을 동시에 처리하지 않는가
+        - business rule이 Controller/Service/Repository에 흩어지지 않는가
+        - domain invariant가 여러 위치에 복제되지 않는가
+        - Service가 단순 CRUD 전달 계층이거나 반대로 God Service가 되지 않는가
+        - DTO와 Entity 역할이 섞이지 않는가
+        - Entity를 API response로 직접 노출하지 않는가
+        - boolean flag로 method 동작이 지나치게 많이 바뀌지 않는가
+        - parameter가 과도하게 많은 것이 모델링 문제를 드러내지 않는가
+        - primitive obsession이 domain concept을 숨기지 않는가
+        - 불필요한 abstraction/design pattern을 만들지 않는가
+
+        모든 곳에 DDD나 Design Pattern을 강요하지 않는다.
+
+
+        [Spring]
+
+        Spring Boot / Spring Framework 관점에서 다음을 검토한다.
+
+        - dependency injection 방식과 객체 lifecycle이 적절한가
+        - singleton bean에 mutable request state를 저장하지 않는가
+        - @Async, scheduler, event listener의 thread/transaction boundary가 안전한가
+        - proxy 기반 기능이 self-invocation으로 우회되지 않는가
+        - Spring이 관리할 resource/thread/lifecycle을 직접 관리하지 않는가
+        - deprecated 또는 현재 framework와 맞지 않는 API를 사용하지 않는가
+
+        framework 동작에 확신이 없으면 버그라고 단정하지 않는다.
+
+
+        [Transaction]
+
+        - @Transactional boundary가 business operation과 맞는가
+        - transaction이 지나치게 넓거나 좁지 않은가
+        - transaction 내부에서 느린 network call을 하지 않는가
+        - DB connection/lock을 불필요하게 오래 점유하지 않는가
+        - readOnly와 실제 write 동작이 충돌하지 않는가
+        - exception/rollback 정책이 의도와 맞는가
+        - self-invocation 때문에 transaction proxy가 적용되지 않는가
+        - propagation 설정이 실제 consistency 요구와 맞는가
+
+        단순히 "@Transactional을 붙이세요"라고 하지 않는다.
+        어떤 business operation이 하나의 원자적 작업이어야 하는지를 기준으로 판단한다.
+
+
+        [동시성 / 데이터 정합성]
+
+        - check-then-act race condition이 존재하지 않는가
+        - exists() 후 save()만으로 uniqueness를 보장하지 않는가
+        - lost update가 가능한가
+        - 동일 resource에 동시 write가 발생해도 결과가 안전한가
+        - application check만 믿고 DB constraint가 빠지지 않았는가
+        - optimistic/pessimistic lock 선택이 실제 conflict 특성에 맞는가
+        - synchronized/local lock을 distributed lock처럼 오해하지 않는가
+        - retry 또는 중복 요청 시 operation이 두 번 적용되지 않는가
+        - idempotency가 필요한 API에 방어 수단이 존재하는가
+
+
+        [JPA / Database]
+
+        - LAZY association 접근으로 N+1이 발생하지 않는가
+        - 불필요한 EAGER loading이 없는가
+        - loop 안에서 repository query를 반복하지 않는가
+        - pagination과 collection fetch join 조합이 안전한가
+        - entity를 대량으로 하나씩 수정하여 불필요한 query가 발생하지 않는가
+        - cascade/orphanRemoval이 의도하지 않은 변경을 만들지 않는가
+        - entity lifecycle을 잘못 이해하지 않는가
+        - DB constraint가 중요한 invariant를 보호하는가
+        - query access pattern에 필요한 index가 명백히 빠져 있지 않은가
+        - count/exists/query를 불필요하게 반복하지 않는가
+        - lock 범위가 지나치게 넓지 않은가
+
+        성능 문제를 데이터량이나 실행 계획 없이 단정하지 않는다.
+        필요한 경우 EXPLAIN, query count, metric 등 검증 방법을 제시한다.
+
+
+        [REST API / Validation]
+
+        - HTTP method와 operation 의미가 맞는가
+        - status code가 실제 결과와 맞는가
+        - request validation이 적절한 boundary에서 이루어지는가
+        - Entity가 외부 API contract로 직접 노출되지 않는가
+        - 대량 collection을 pagination 없이 반환하지 않는가
+        - error response가 일관적인가
+        - 기존 API contract를 의도치 않게 깨뜨리지 않는가
+        - idempotent해야 하는 operation이 실제로 안전한가
+
+
+        [외부 API]
+
+        날씨 API 등 외부 network dependency가 사용되면 다음을 확인한다.
+
+        - connect/read/request timeout이 존재하는가
+        - 무제한 또는 무분별한 retry가 없는가
+        - retry 대상과 backoff 정책이 적절한가
+        - retry storm 가능성이 없는가
+        - 외부 API rate limit을 고려하는가
+        - 외부 장애가 request thread/connection pool 고갈로 전파되지 않는가
+        - transaction 안에서 network call을 하지 않는가
+        - fallback이 오류 데이터를 정상 데이터처럼 취급하지 않는가
+
+
+        [Security]
+
+        - Authentication과 Authorization을 혼동하지 않는가
+        - resource ownership 검증이 빠지지 않았는가
+        - IDOR 가능성이 없는가
+        - injection 위험이 없는가
+        - password/token/API key/secret이 코드에 포함되지 않는가
+        - 민감정보가 log에 기록되지 않는가
+        - client input을 그대로 권한/상태 변경에 사용하지 않는가
+
+
+        [Observability]
+
+        - 장애 분석에 필요한 log가 빠져 있지 않은가
+        - 반대로 request body/token/개인정보를 과도하게 logging하지 않는가
+        - 동일 장애에서 error log가 폭증하지 않는가
+        - 중요한 외부 API/DB 처리에서 latency/error/retry를 관측할 필요가 있는가
+
+        모든 코드에 log/metric을 추가하라고 요구하지 않는다.
+
+
+        [리뷰 comment 작성 방법]
+
+        의미 있는 문제를 발견하면 가능한 범위에서 다음 순서로 설명한다.
+
+        1. 무엇이 문제인지
+        2. 왜 문제인지
+        3. 어떤 조건에서 실제 문제가 발생하는지
+        4. 개선 방향
+        5. 선택지가 있다면 trade-off
+        6. 필요하면 검증 방법
+
+        단순한 문제는 짧게 설명한다.
+
+        Java/JVM, 자료구조, transaction, concurrency, JPA처럼
+        학습 가치가 높은 문제는 관련 개념을 함께 설명한다.
+
+        완성된 코드를 무조건 대신 작성하지 않는다.
+        먼저 문제와 판단 기준을 설명한다.
+
+        diff만으로 판단할 수 없는 내용은 결함이라고 단정하지 않는다.
+        필요한 전제가 있다면 질문으로 남긴다.
+
+        같은 root cause를 여러 line에서 반복해서 comment하지 않는다.
+
+
+    # ========================================================================
+    # Test
+    # ========================================================================
+
+    - path: "ipda-server/src/test/java/**/*.java"
+      instructions: |
+        테스트 코드의 목적은 coverage 숫자가 아니라
+        production behavior와 invariant를 실제로 보호하는 것이다.
+
+        다음을 확인한다.
+
+        - happy path만 있고 failure path가 빠지지 않았는가
+        - boundary value / invalid input을 검증하는가
+        - concurrency가 중요한 로직에 동시성 테스트가 필요한가
+        - transaction/rollback behavior를 실제로 검증해야 하는가
+        - idempotency 또는 retry 로직의 중복 실행을 검증하는가
+        - authorization을 role/owner/resource 관점에서 검증하는가
+        - JPA behavior를 mock만으로 검증하여 실제 DB 동작을 놓치지 않는가
+        - Mockito verify가 implementation detail에 지나치게 결합하지 않는가
+        - 시간/random/shared state 때문에 flaky하지 않은가
+        - 테스트 간 실행 순서 의존성이 없는가
+        - 테스트 fixture 자체가 불필요한 mutable shared state를 가지지 않는가
+
+        "테스트를 추가하세요"라고만 하지 말고
+        어떤 실제 failure를 막기 위한 테스트인지 설명한다.
+
+
+    # ========================================================================
+    # Spring configuration
+    # ========================================================================
+
+    - path: "ipda-server/src/main/resources/**/*.yml"
+      instructions: |
+        Spring Boot configuration의 correctness와 운영 위험을 검토한다.
+
+        - password/token/API key/secret 노출
+        - 잘못된 property 이름 또는 nesting
+        - profile별 설정 혼합
+        - actuator의 과도한 공개
+        - SQL/body/header/token/개인정보 logging
+        - 명백히 위험한 connection pool 설정
+        - timeout/retry 설정 누락 또는 과도한 값
+        - 환경마다 다르게 동작할 위험이 있는 설정
+
+        단순 YAML formatting은 지적하지 않는다.
+
+    - path: "ipda-server/src/main/resources/**/*.yaml"
+      instructions: |
+        Spring Boot configuration의 correctness와 운영 위험을 검토한다.
+
+        secret 노출, profile 분리, 잘못된 property,
+        actuator 노출, logging, connection pool,
+        timeout/retry를 우선적으로 확인한다.
+
+        단순 YAML formatting은 지적하지 않는다.
+
+
+    # ========================================================================
+    # SQL
+    # ========================================================================
+
+    - path: "ipda-server/**/*.sql"
+      instructions: |
+        SQL correctness와 데이터 규모, 운영 영향을 검토한다.
+
+        - unique/not-null/foreign-key constraint가 invariant를 보호하는가
+        - application check만으로 uniqueness를 보장하지 않는가
+        - access pattern에 필요한 index가 명백히 빠지지 않았는가
+        - 대량 UPDATE/DELETE가 긴 lock을 만들 가능성이 있는가
+        - migration이 기존 application version과 호환되는가
+        - column drop/rename/not-null 변경이 배포 중 장애를 만들 수 있는가
+        - 반복 query 또는 과도한 DB round-trip이 존재하는가
+
+        query 성능은 데이터량과 실행 계획 없이 단정하지 않는다.
+
+
+    # ========================================================================
+    # Gradle - 현재 프로젝트
+    # ========================================================================
+
+    - path: "ipda-server/**/*.gradle"
+      instructions: |
+        Java/Spring Boot Gradle build 설정을 검토한다.
+
+        - Java toolchain과 실제 runtime 의도 일치 여부
+        - Spring Boot/plugin/dependency version 호환성
+        - implementation/runtimeOnly/testImplementation scope
+        - 불필요하거나 중복된 dependency
+        - annotation processor 설정
+        - dynamic version 등 재현 불가능한 build
+        - test/build task의 의도치 않은 skip
+        - dependency 변경으로 인한 명백한 보안/호환성 위험
+
+        dependency 선언 순서나 formatting은 지적하지 않는다.
+
+    - path: "ipda-server/**/*.gradle.kts"
+      instructions: |
+        Java/Spring Boot Gradle Kotlin DSL 설정을 검토한다.
+
+        Java toolchain, dependency scope, plugin/dependency compatibility,
+        build reproducibility, annotation processor와 test 설정의
+        실제 문제를 우선적으로 검토한다.
+
+
+    # ========================================================================
+    # Docker
+    # ========================================================================
+
+    - path: "**/Dockerfile*"
+      instructions: |
+        production container 관점에서 검토한다.
+
+        - secret이 image layer에 들어가지 않는가
+        - 불필요하게 큰 runtime image가 만들어지지 않는가
+        - multi-stage build가 필요한 구조인지 검토한다
+        - root 권한으로 실행할 필요가 있는가
+        - Java runtime과 project toolchain이 일치하는가
+        - build artifact/source가 불필요하게 포함되지 않는가
+        - layer cache가 비효율적으로 깨지지 않는가
+
+        단순 Dockerfile 스타일 취향은 지적하지 않는다.
+
+
+    # ========================================================================
+    # GitHub Actions
+    # ========================================================================
+
+    - path: ".github/workflows/**/*.yml"
+      instructions: |
+        CI/CD correctness와 security를 검토한다.
+
+        - permissions가 필요 이상으로 넓지 않은가
+        - secret이 log에 노출되지 않는가
+        - untrusted PR input을 shell에 직접 사용하지 않는가
+        - Java version/toolchain이 project와 일치하는가
+        - build/test가 실제로 실행되는가
+        - cache가 stale artifact를 잘못 재사용하지 않는가
+        - failure를 의도치 않게 무시하지 않는가
+        - 중복 deployment가 발생할 가능성이 없는가
+        - third-party action 사용에 명백한 보안 위험이 없는가
+
+        YAML formatting은 지적하지 않는다.
+
+    - path: ".github/workflows/**/*.yaml"
+      instructions: |
+        CI/CD correctness와 security를 검토한다.
+
+        permission, secret, untrusted input, Java version,
+        build/test, cache, artifact, deployment 문제를 우선 확인한다.
+
+
+  # ---------------------------------------------------------------------------
+  # 정적 분석 / 보안 도구
+  # ---------------------------------------------------------------------------
+
+  tools:
+    # Java static analysis
+    pmd:
+      enabled: true
+
+    # 코드 패턴 / 보안
+    semgrep:
+      enabled: true
+
+    # secret detection
+    gitleaks:
+      enabled: true
+
+    # dependency vulnerability
+    osvScanner:
+      enabled: true
+
+    # YAML
+    yamllint:
+      enabled: true
+
+    # GitHub Actions
+    actionlint:
+      enabled: true
+
+    # Dockerfile
+    hadolint:
+      enabled: true
+
+    # Docker / IaC security
+    trivy:
+      enabled: true
+
+
+  # ---------------------------------------------------------------------------
+  # 자동 수정 기능
+  # ---------------------------------------------------------------------------
+
+  finishing_touches:
+    # 공부가 목적이므로 CodeRabbit이 바로 고치지 않도록 한다.
+    autofix:
+      enabled: false
+
+    # 테스트/리팩토링도 자동 생성하지 않음.
+    unit_tests:
+      enabled: false
+
+    simplify:
+      enabled: false
+
+    docstrings:
+      enabled: false
+
+
+chat:
+  art: false
+  auto_reply: true
+
+
+knowledge_base:
+  opt_out: false
+
+  # 이 저장소에서 생긴 학습은 이 저장소에만 적용.
+  learnings:
+    scope: "local"
+    approval_delay: 0

@@ -20,6 +20,13 @@
 ### Commit  컨벤션
 ```text
 <타입>: <내용>
+
+- 🔥 hotfix:
+- 🛠️ refactor:
+- 🍀 feat:
+- 🚨 fix:
+- 💻 chore:
+- 📚 docs:
 ```
 ### Branch 컨벤션
 모든 작업에 대해 시작시 브랜치를 생성해서 작업을 진행합니다
